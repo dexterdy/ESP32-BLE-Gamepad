@@ -1298,39 +1298,35 @@ void BleGamepad::setBatteryLevel(uint8_t level)
 void BleGamepad::taskServer(void *pvParameter)
 {
     BleGamepad *BleGamepadInstance = (BleGamepad *)pvParameter; // static_cast<BleGamepad *>(pvParameter);
+
     NimBLEDevice::init(BleGamepadInstance->deviceName);
+
     NimBLEServer *pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(BleGamepadInstance->connectionStatus);
+    BleGamepadInstance->connectionStatus->inputGamepad = BleGamepadInstance->inputGamepad;
 
     BleGamepadInstance->hid = new NimBLEHIDDevice(pServer);
     BleGamepadInstance->inputGamepad = BleGamepadInstance->hid->inputReport(BleGamepadInstance->configuration.getHidReportId()); // <-- input REPORTID from report map
-    BleGamepadInstance->connectionStatus->inputGamepad = BleGamepadInstance->inputGamepad;
 
     BleGamepadInstance->hid->manufacturer()->setValue(BleGamepadInstance->deviceManufacturer);
-
     BleGamepadInstance->hid->pnp(0x01, vid, pid, 0x0110);
     BleGamepadInstance->hid->hidInfo(0x00, 0x01);
-
-    NimBLESecurity *pSecurity = new NimBLESecurity();
-
-    pSecurity->setAuthenticationMode(ESP_LE_AUTH_BOND);
+    BleGamepadInstance->hid->setBatteryLevel(BleGamepadInstance->batteryLevel);
 
     uint8_t *customHidReportDescriptor = new uint8_t[hidReportDescriptorSize];
     memcpy(customHidReportDescriptor, tempHidReportDescriptor, hidReportDescriptorSize);
-
-    for (int i = 0; i < hidReportDescriptorSize; i++)
-        Serial.printf("%02x", customHidReportDescriptor[i]);
-
     BleGamepadInstance->hid->reportMap((uint8_t *)customHidReportDescriptor, hidReportDescriptorSize);
-    BleGamepadInstance->hid->startServices();
 
+    NimBLESecurity *pSecurity = new NimBLESecurity();
+    pSecurity->setAuthenticationMode(ESP_LE_AUTH_BOND);
+
+    BleGamepadInstance->hid->startServices();
     BleGamepadInstance->onStarted(pServer);
 
     NimBLEAdvertising *pAdvertising = pServer->getAdvertising();
     pAdvertising->setAppearance(HID_GAMEPAD);
     pAdvertising->addServiceUUID(BleGamepadInstance->hid->hidService()->getUUID());
     pAdvertising->start();
-    BleGamepadInstance->hid->setBatteryLevel(BleGamepadInstance->batteryLevel);
 
     ESP_LOGD(LOG_TAG, "Advertising started!");
     vTaskDelay(portMAX_DELAY); // delay(portMAX_DELAY);
